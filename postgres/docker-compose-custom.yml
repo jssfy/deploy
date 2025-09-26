@@ -1,0 +1,62 @@
+# 使用自定义网络的Docker Compose配置示例
+# 提供更好的网络隔离和灵活性
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-myapp}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      # 方式1: 绑定到特定IP
+      - "192.168.1.100:${POSTGRES_PORT:-5432}:5432"
+      # 方式2: 绑定到所有接口（当前使用）
+      # - "0.0.0.0:${POSTGRES_PORT:-5432}:5432"
+      # 方式3: 只绑定到本地回环
+      # - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - /home/data/postgres:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - /usr/data/backups:/backups
+      - ./postgres-config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./postgres-config/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    networks:
+      - postgres_network
+      - external_network  # 连接到外部网络
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "0.0.0.0:${PGADMIN_PORT:-8080}:80"
+    volumes:
+      - /home/data/pgadmin:/var/lib/pgadmin
+    networks:
+      - postgres_network
+      - external_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  postgres_network:
+    driver: bridge
+    internal: false  # 允许外部访问
+  external_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
