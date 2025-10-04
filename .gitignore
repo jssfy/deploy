@@ -37,3 +37,5 @@ node_modules/
 
 # keys
 19720390_www.yeanhua.asia_nginx/
+*.key
+*.pem

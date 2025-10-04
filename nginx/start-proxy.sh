@@ -17,9 +17,11 @@ CONTAINER_NAME="nginx-proxy"
 HOST_PORT=80
 CONTAINER_PORT=80
 CONFIG_DIR="./config"
+CERT_PATH="${CONFIG_DIR}/data.yeanhua.asia.pem"
+KEY_PATH="${CONFIG_DIR}/data.yeanhua.asia.key"
 HTML_DIR="./html"
 LOGS_DIR="./logs"
-HOST_NETWORK=false
+HOST_NETWORK=true
 
 # 显示帮助信息
 show_help() {
@@ -32,11 +34,13 @@ show_help() {
     echo "  -p, --port PORT        主机端口 (默认: 80)"
     echo "  -d, --detach           后台运行容器"
     echo "  -f, --force            强制重新创建容器"
-    echo "  --host-network         使用host网络模式"
+    echo "  --host-network         使用host网络模式 (默认启用)"
+    echo "  --bridge-network       使用bridge网络模式"
     echo "  --help                 显示此帮助信息"
     echo ""
     echo "示例:"
-    echo "  $0 -d"
+    echo "  $0 -d                    # 使用host网络模式启动"
+    echo "  $0 --bridge-network -d  # 使用bridge网络模式启动"
     echo "  $0 -n my-proxy -p 8080 -d"
 }
 
@@ -65,6 +69,10 @@ parse_args() {
                 ;;
             --host-network)
                 HOST_NETWORK=true
+                shift
+                ;;
+            --bridge-network)
+                HOST_NETWORK=false
                 shift
                 ;;
             --help)
@@ -105,20 +113,21 @@ check_config_files() {
     fi
     
     # 检查SSL证书文件
-    if [ ! -f "$CONFIG_DIR/19720390_www.yeanhua.asia_nginx/www.yeanhua.asia.pem" ]; then
-        echo -e "${RED}❌ SSL证书文件不存在: $CONFIG_DIR/19720390_www.yeanhua.asia_nginx/www.yeanhua.asia.pem${NC}"
+    if [ ! -f "${CERT_PATH}" ]; then
+        echo -e "${RED}❌ SSL证书文件不存在: ${CERT_PATH}${NC}"
         exit 1
     fi
     
-    if [ ! -f "$CONFIG_DIR/19720390_www.yeanhua.asia_nginx/www.yeanhua.asia.key" ]; then
-        echo -e "${RED}❌ SSL私钥文件不存在: $CONFIG_DIR/19720390_www.yeanhua.asia_nginx/www.yeanhua.asia.key${NC}"
+    if [ ! -f "${KEY_PATH}" ]; then
+        echo -e "${RED}❌ SSL私钥文件不存在: ${KEY_PATH}${NC}"
         exit 1
     fi
     
     echo -e "${GREEN}✅ 配置文件检查通过${NC}"
     echo "  nginx.conf: $CONFIG_DIR/nginx.conf"
     echo "  proxy.conf: $CONFIG_DIR/proxy.conf"
-    echo "  SSL证书: $CONFIG_DIR/19720390_www.yeanhua.asia_nginx/"
+    echo "  SSL证书: ${CERT_PATH}"
+    echo "  SSL私钥: ${KEY_PATH}"
 }
 
 # 检查端口
@@ -177,11 +186,11 @@ start_container() {
     fi
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/nginx.conf:/etc/nginx/nginx.conf:ro"
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/proxy.conf:/etc/nginx/proxy.conf:ro"
-    DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/19720390_www.yeanhua.asia_nginx:/etc/nginx/ssl:ro"
+    DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR:/etc/nginx/ssl:ro"
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$HTML_DIR:/usr/share/nginx/html:ro"
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$LOGS_DIR:/var/log/nginx"
     DOCKER_CMD="$DOCKER_CMD --restart unless-stopped"
-    DOCKER_CMD="$DOCKER_CMD nginx:1.23.2"
+    DOCKER_CMD="$DOCKER_CMD swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/nginx:1.23.2"
     
     echo -e "${BLUE}执行命令: $DOCKER_CMD${NC}"
     eval "$DOCKER_CMD"

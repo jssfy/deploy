@@ -5,6 +5,7 @@
 ## 文件说明
 
 - `start-proxy.sh` - Nginx 代理容器启动脚本
+   - 调试：root@f450f25644fe:/var/log/nginx# tail -f error.log
 - `README.md` - 使用说明文档
 
 ## 快速开始
