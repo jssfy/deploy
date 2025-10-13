@@ -1,0 +1,263 @@
+# Prometheus告警规则配置
+# 定义双服务架构的告警规则
+
+groups:
+  # API服务告警组
+  - name: api_service_alerts
+    rules:
+      # 高错误率告警
+      - alert: APIHighErrorRate
+        expr: rate(http_5xx_errors_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: api_service
+        annotations:
+          summary: "API服务错误率过高"
+          description: "API服务在过去5分钟内的5xx错误率超过10%"
+          runbook_url: "https://wiki.company.com/runbooks/api-high-error-rate"
+
+      # 高延迟告警
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          service: api_service
+        annotations:
+          summary: "API服务延迟过高"
+          description: "API服务95%的请求延迟超过2秒"
+          runbook_url: "https://wiki.company.com/runbooks/api-high-latency"
+
+      # 高并发告警
+      - alert: APIHighConcurrency
+        expr: http_requests_in_flight > 1000
+        for: 1m
+        labels:
+          severity: warning
+          service: api_service
+        annotations:
+          summary: "API服务并发请求数过高"
+          description: "API服务当前并发请求数超过1000"
+          runbook_url: "https://wiki.company.com/runbooks/api-high-concurrency"
+
+      # 4xx错误率告警
+      - alert: APIHigh4xxErrorRate
+        expr: rate(http_4xx_errors_total[5m]) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: api_service
+        annotations:
+          summary: "API服务4xx错误率过高"
+          description: "API服务在过去5分钟内的4xx错误率超过20%"
+
+      # 检索接口异常告警
+      - alert: SearchServiceError
+        expr: rate(search_requests_total{status="failed"}[5m]) / rate(search_requests_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          service: api_service
+          component: search
+        annotations:
+          summary: "检索服务失败率过高"
+          description: "检索服务在过去5分钟内的失败率超过5%"
+
+      # 写入接口异常告警
+      - alert: WriteServiceError
+        expr: rate(write_requests_total{status="failed"}[5m]) / rate(write_requests_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          service: api_service
+          component: write
+        annotations:
+          summary: "写入服务失败率过高"
+          description: "写入服务在过去5分钟内的失败率超过5%"
+
+  # 数据处理服务告警组
+  - name: data_processing_service_alerts
+    rules:
+      # 队列积压告警
+      - alert: QueueBacklog
+        expr: queue_depth > 10000
+        for: 5m
+        labels:
+          severity: critical
+          service: data_processing_service
+        annotations:
+          summary: "消息队列积压严重"
+          description: "队列 {{ $labels.queue_name }} 中积压消息数超过10000"
+          runbook_url: "https://wiki.company.com/runbooks/queue-backlog"
+
+      # 处理失败率告警
+      - alert: HighProcessingFailureRate
+        expr: rate(messages_consumed_total{status="failed"}[5m]) / rate(messages_consumed_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          service: data_processing_service
+        annotations:
+          summary: "消息处理失败率过高"
+          description: "消息处理失败率超过5%"
+          runbook_url: "https://wiki.company.com/runbooks/high-processing-failure-rate"
+
+      # 消费延迟告警
+      - alert: HighConsumptionDelay
+        expr: histogram_quantile(0.95, rate(message_consumption_delay_seconds_bucket[5m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+          service: data_processing_service
+        annotations:
+          summary: "消息消费延迟过高"
+          description: "95%的消息消费延迟超过5分钟"
+          runbook_url: "https://wiki.company.com/runbooks/high-consumption-delay"
+
+      # 消息处理延迟告警
+      - alert: HighProcessingDelay
+        expr: histogram_quantile(0.95, rate(message_processing_duration_seconds_bucket[5m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: data_processing_service
+        annotations:
+          summary: "消息处理延迟过高"
+          description: "95%的消息处理时间超过60秒"
+
+      # 存储操作失败告警
+      - alert: StorageOperationFailure
+        expr: rate(storage_operations_total{status="failed"}[5m]) / rate(storage_operations_total[5m]) > 0.01
+        for: 3m
+        labels:
+          severity: critical
+          service: data_processing_service
+          component: storage
+        annotations:
+          summary: "存储操作失败率过高"
+          description: "存储操作失败率超过1%"
+
+      # 数据库连接异常告警
+      - alert: DatabaseConnectionIssue
+        expr: db_connections_active == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: data_processing_service
+          component: database
+        annotations:
+          summary: "数据库连接异常"
+          description: "数据库 {{ $labels.database }} 没有活跃连接"
+
+  # 系统资源告警组
+  - name: system_resource_alerts
+    rules:
+      # 内存使用告警
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 / 1024 > 4
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "服务内存使用过高"
+          description: "服务 {{ $labels.service_name }} 内存使用超过4GB"
+
+      # CPU使用告警
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "服务CPU使用率过高"
+          description: "服务 {{ $labels.service_name }} CPU使用率超过80%"
+
+      # 文件描述符使用告警
+      - alert: HighFileDescriptorUsage
+        expr: process_open_fds / process_max_fds > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "文件描述符使用率过高"
+          description: "服务 {{ $labels.service_name }} 文件描述符使用率超过80%"
+
+  # 服务健康告警组
+  - name: service_health_alerts
+    rules:
+      # 服务不健康告警
+      - alert: ServiceUnhealthy
+        expr: service_health_status == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: health
+        annotations:
+          summary: "服务不健康"
+          description: "服务 {{ $labels.service_name }} 健康检查失败"
+
+      # 服务重启告警
+      - alert: ServiceRestarted
+        expr: increase(service_start_time_seconds[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+          component: health
+        annotations:
+          summary: "服务重启"
+          description: "服务 {{ $labels.service_name }} 在过去1小时内重启了"
+
+  # 依赖服务告警组
+  - name: dependency_alerts
+    rules:
+      # 外部API调用失败告警
+      - alert: ExternalAPIFailure
+        expr: rate(external_api_calls_total{status="failed"}[5m]) / rate(external_api_calls_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: external_api
+        annotations:
+          summary: "外部API调用失败率过高"
+          description: "外部API {{ $labels.service }}/{{ $labels.endpoint }} 调用失败率超过10%"
+
+      # 依赖服务不健康告警
+      - alert: DependencyUnhealthy
+        expr: dependency_health_status == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: dependency
+        annotations:
+          summary: "依赖服务不健康"
+          description: "依赖服务 {{ $labels.dependency_name }} 健康检查失败"
+
+  # 业务指标告警组
+  - name: business_metrics_alerts
+    rules:
+      # 业务异常告警
+      - alert: HighBusinessExceptionRate
+        expr: rate(business_exceptions_total[5m]) > 10
+        for: 3m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "业务异常率过高"
+          description: "业务异常发生频率超过每分钟10次"
+
+      # 消息消费速率异常告警
+      - alert: LowMessageConsumptionRate
+        expr: messages_consumed_per_second < 1
+        for: 10m
+        labels:
+          severity: warning
+          service: data_processing_service
+          component: consumption
+        annotations:
+          summary: "消息消费速率过低"
+          description: "消息消费速率低于每秒1条消息"

@@ -1,0 +1,131 @@
+# Prometheus配置解决方案示例
+# 展示如何处理同一目标的多种配置方式
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # ========================================
+  # 方案一：单一作业配置（推荐）
+  # ========================================
+  - job_name: 'dual-service-app'
+    static_configs:
+      - targets: ['app:38000']
+        labels:
+          service: 'dual-service'
+          components: 'api,data-processing'
+          environment: 'production'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # ========================================
+  # 方案二：使用重新标记区分服务
+  # ========================================
+  - job_name: 'microservices'
+    static_configs:
+      - targets: ['app:38000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    
+    # 重新标记配置 - 根据指标内容添加标签
+    metric_relabel_configs:
+      # 为API相关指标添加service标签
+      - source_labels: [__name__]
+        regex: 'http_requests_total|http_request_duration_seconds|search_requests_total|write_requests_total'
+        target_label: service
+        replacement: 'api-service'
+      
+      # 为数据处理相关指标添加service标签
+      - source_labels: [__name__]
+        regex: 'messages_consumed_total|queue_depth|message_processing_duration_seconds'
+        target_label: service
+        replacement: 'data-processing-service'
+
+  # ========================================
+  # 方案三：不同端口配置（如果服务分离）
+  # ========================================
+  # 如果将来API服务和数据处理服务分离到不同端口
+  - job_name: 'api-service'
+    static_configs:
+      - targets: ['api-service:38000']
+        labels:
+          service: 'api'
+          component: 'web'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
+  - job_name: 'data-processing-service'
+    static_configs:
+      - targets: ['data-processing-service:8001']
+        labels:
+          service: 'data-processing'
+          component: 'worker'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # ========================================
+  # 方案四：使用服务发现
+  # ========================================
+  - job_name: 'discovered-services'
+    # 使用文件服务发现
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/targets/*.yml'
+        refresh_interval: 5m
+    
+    # 重新标记配置
+    relabel_configs:
+      # 从文件中的标签设置job名称
+      - source_labels: [__meta_file_service_type]
+        target_label: service
+      
+      # 设置实例标签
+      - source_labels: [__address__]
+        target_label: instance
+    
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  # ========================================
+  # 方案五：多实例配置
+  # ========================================
+  - job_name: 'multi-instance-app'
+    static_configs:
+      - targets: 
+          - 'app-1:38000'
+          - 'app-2:38000'
+          - 'app-3:38000'
+        labels:
+          service: 'dual-service'
+          environment: 'production'
+          cluster: 'main'
+    
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+    
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s

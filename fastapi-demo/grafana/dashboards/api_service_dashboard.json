@@ -1,0 +1,564 @@
+{
+  "id": null,
+  "title": "API服务监控仪表板",
+  "tags": ["api", "monitoring", "memory", "system"],
+  "style": "dark",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 100,
+      "title": "📊 业务指标",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "title": "记忆总量（按类型）",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "memory_total",
+          "legendFormat": "{{memory_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "数量",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "id": 2,
+      "title": "记忆日变化量",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "memory_daily_change{change_type=\"increase\"}",
+          "legendFormat": "{{memory_type}} 增加"
+        },
+        {
+          "expr": "memory_daily_change{change_type=\"decrease\"}",
+          "legendFormat": "{{memory_type}} 减少"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "变化量",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      }
+    },
+    {
+      "id": 3,
+      "title": "Memcell按源类型统计",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "memcell_by_source_total",
+          "legendFormat": "{{source_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "数量",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "id": 4,
+      "title": "记忆相关用户数量",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "memory_users_total",
+          "legendFormat": "{{memory_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "用户数",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      }
+    },
+    {
+      "id": 5,
+      "title": "记忆操作QPS",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(memorize_operations_total[5m])",
+          "legendFormat": "{{operation_type}} - {{memory_type}} [{{status}}]"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "操作/秒",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      }
+    },
+    {
+      "id": 200,
+      "title": "🔧 稳定性指标",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "title": "实时QPS（按路径）",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "http_requests_qps",
+          "legendFormat": "{{path}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "请求/秒",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "id": 7,
+      "title": "按状态码的QPS",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "http_requests_qps_by_status",
+          "legendFormat": "{{path}} [{{status}}]"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "请求/秒",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      }
+    },
+    {
+      "id": 8,
+      "title": "请求延迟分布",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "P90"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "延迟 (秒)",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "id": 9,
+      "title": "错误率",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(http_5xx_errors_total[5m])",
+          "legendFormat": "5xx错误率"
+        },
+        {
+          "expr": "rate(http_4xx_errors_total[5m])",
+          "legendFormat": "4xx错误率"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "错误/秒",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      }
+    },
+    {
+      "id": 10,
+      "title": "CPU使用率",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "system_cpu_usage_percent{cpu=\"total\"}",
+          "legendFormat": "总体CPU"
+        },
+        {
+          "expr": "avg(system_cpu_usage_percent{cpu!=\"total\"})",
+          "legendFormat": "平均CPU"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "使用率 (%)",
+          "min": 0,
+          "max": 100
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      }
+    },
+    {
+      "id": 11,
+      "title": "内存使用情况",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "system_memory_usage_percent",
+          "legendFormat": "内存使用率"
+        },
+        {
+          "expr": "system_memory_usage_bytes{memory_type=\"used\"} / 1024 / 1024 / 1024",
+          "legendFormat": "已使用 (GB)"
+        },
+        {
+          "expr": "system_memory_usage_bytes{memory_type=\"available\"} / 1024 / 1024 / 1024",
+          "legendFormat": "可用 (GB)"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "内存",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      }
+    },
+    {
+      "id": 12,
+      "title": "磁盘使用率",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "system_disk_usage_percent",
+          "legendFormat": "{{disk}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "使用率 (%)",
+          "min": 0,
+          "max": 100
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      }
+    },
+    {
+      "id": 13,
+      "title": "网络流量",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(system_network_bytes_total{direction=\"sent\"}[5m]) / 1024 / 1024",
+          "legendFormat": "{{interface}} 发送 (MB/s)"
+        },
+        {
+          "expr": "rate(system_network_bytes_total{direction=\"received\"}[5m]) / 1024 / 1024",
+          "legendFormat": "{{interface}} 接收 (MB/s)"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "流量 (MB/s)",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      }
+    },
+    {
+      "id": 14,
+      "title": "网络错误",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(system_network_errors_total[5m])",
+          "legendFormat": "{{interface}} - {{error_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "错误/秒",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      }
+    },
+    {
+      "id": 300,
+      "title": "⚡ 性能 & 追踪指标",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 66
+      },
+      "collapsed": false
+    },
+    {
+      "id": 15,
+      "title": "Memorize操作延迟（Pxx）",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(memorize_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(memorize_duration_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(memorize_duration_seconds_bucket[5m]))",
+          "legendFormat": "P90"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(memorize_duration_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "延迟 (秒)",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 67
+      }
+    },
+    {
+      "id": 16,
+      "title": "Memorize并发处理数",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "memorize_concurrent",
+          "legendFormat": "{{operation_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "并发数",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 67
+      }
+    },
+    {
+      "id": 17,
+      "title": "队列任务状态",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "queue_tasks_total",
+          "legendFormat": "{{queue_name}} [{{status}}]"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "任务数",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 75
+      }
+    },
+    {
+      "id": 18,
+      "title": "并发任务数量",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "concurrent_tasks_count",
+          "legendFormat": "{{task_type}} 当前并发"
+        },
+        {
+          "expr": "concurrent_tasks_max",
+          "legendFormat": "{{task_type}} 最大并发"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "任务数",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 75
+      }
+    },
+    {
+      "id": 19,
+      "title": "队列任务处理速率",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(queue_tasks_total{status=\"completed\"}[5m])",
+          "legendFormat": "{{queue_name}} 完成速率"
+        },
+        {
+          "expr": "rate(queue_tasks_total{status=\"failed\"}[5m])",
+          "legendFormat": "{{queue_name}} 失败速率"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "任务/秒",
+          "min": 0
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "5s",
+  "schemaVersion": 27,
+  "version": 2,
+  "links": [],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+# Prometheus配置文件
+# 用于抓取双服务的监控指标
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # 双服务应用（API服务 + 数据处理服务）
+  - job_name: 'dual-service-app'
+    static_configs:
+      - targets: ['app:38000']
+        labels:
+          service: 'dual-service'
+          components: 'api,data-processing'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

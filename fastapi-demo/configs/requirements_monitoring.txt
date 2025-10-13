@@ -1,0 +1,14 @@
+# 监控相关依赖包
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+prometheus-client==0.19.0
+redis==5.0.1
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+alembic==1.13.1
+pydantic==2.5.0
+python-multipart==0.0.6
+httpx==0.25.2
+asyncio-mqtt==0.16.1
+celery==5.3.4
+flower==2.0.1
