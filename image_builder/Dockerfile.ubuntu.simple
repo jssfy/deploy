@@ -1,0 +1,87 @@
+# 简化版本：避免证书问题，使用HTTP源
+# 基于华为云Ubuntu 24.04 ARM64镜像构建
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/ubuntu:24.04-linuxarm64
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 配置国内HTTP镜像源 (避免证书问题)
+RUN cp /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak && \
+    cat > /etc/apt/sources.list.d/ubuntu.sources << 'EOF'
+Types: deb
+URIs: http://mirrors.aliyun.com/ubuntu-ports/
+Suites: noble noble-updates noble-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://mirrors.aliyun.com/ubuntu-ports/
+Suites: noble-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+
+# 更新包列表并安装所有依赖
+RUN apt-get update && \
+    apt-get install -y \
+    # 基础工具
+    curl \
+    wget \
+    git \
+    vim \
+    unzip \
+    zip \
+    ca-certificates \
+    # 构建工具
+    build-essential \
+    g++ \
+    gcc \
+    # Python相关
+    python3.12 \
+    python3.12-dev \
+    python3.12-venv \
+    python3-pip \
+    # 系统库 (项目依赖需要)
+    libgl1 \
+    libgomp1 \
+    libglib2.0-0 \
+    ffmpeg \
+    # 进程管理
+    procps \
+    # 清理缓存
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建python3和pip的软链接 (确保兼容性)
+RUN ln -sf /usr/bin/python3.12 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.12 /usr/bin/python
+
+# 配置pip并安装uv (跳过pip升级，直接安装uv)
+RUN python3 -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    python3 -m pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
+    python3 -m pip install --no-cache-dir uv --break-system-packages && \
+    ln -sf /usr/bin/python3.12 /usr/bin/python && \
+    ln -sf /usr/bin/pip3 /usr/bin/pip
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置uv配置环境变量
+ARG UV_INDEX_TANKA_USERNAME
+ARG UV_INDEX_TANKA_PASSWORD
+ENV UV_INDEX_TANKA_USERNAME=${UV_INDEX_TANKA_USERNAME}
+ENV UV_INDEX_TANKA_PASSWORD=${UV_INDEX_TANKA_PASSWORD}
+
+# 复制项目文件
+COPY . /app
+
+# 安装项目依赖
+RUN uv sync --frozen
+
+# 暴露端口 (根据run.py默认端口1995)
+EXPOSE 1995
+
+# 设置启动命令
+CMD ["uv", "run", "python", "src/run.py"]
