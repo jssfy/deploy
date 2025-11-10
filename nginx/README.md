@@ -40,7 +40,9 @@
 | `-p` | `--port` | 主机端口 | `80` |
 | `-d` | `--detach` | 后台运行容器 | `false` |
 | `-f` | `--force` | 强制重新创建容器 | `false` |
-| `--host-network` | | 使用host网络模式 | `false` |
+| `--host-network` | | 使用host网络模式 | `true` |
+| `--bridge-network` | | 使用bridge网络模式 | `false` |
+| `--no-ssl` | | 禁用SSL，仅使用HTTP | `false` |
 | `--help` | | 显示帮助信息 | |
 
 #### 使用示例
@@ -52,14 +54,20 @@
 # 2. Bridge网络模式启动
 ./start-proxy.sh -d
 
-# 3. 自定义端口和名称
+# 3. 禁用SSL，仅使用HTTP（无需证书）
+./start-proxy.sh --no-ssl -d
+
+# 4. 自定义端口和名称
 ./start-proxy.sh -n web-proxy -p 8080 -d
 
-# 4. 强制重新创建容器
+# 5. 强制重新创建容器
 ./start-proxy.sh -f -d
 
-# 5. 前台运行（调试模式）
+# 6. 前台运行（调试模式）
 ./start-proxy.sh --host-network
+
+# 7. 组合使用：禁用SSL + host网络模式
+./start-proxy.sh --no-ssl --host-network -d
 ```
 
 ## 目录结构
@@ -71,11 +79,11 @@ deploy/nginx/
 ├── start-proxy.sh
 ├── README.md
 ├── config/
-│   ├── nginx.conf                    # Nginx主配置文件
+│   ├── nginx.conf                    # Nginx主配置文件（含SSL）
+│   ├── nginx_no_ssl.conf             # Nginx配置文件（无SSL）
 │   ├── proxy.conf                    # 代理配置文件
-│   └── 19720390_www.yeanhua.asia_nginx/  # SSL证书目录
-│       ├── www.yeanhua.asia.pem
-│       └── www.yeanhua.asia.key
+│   ├── data.yeanhua.asia.pem         # SSL证书（可选）
+│   └── data.yeanhua.asia.key         # SSL私钥（可选）
 ├── html/
 │   └── index.html                    # 默认HTML页面
 └── logs/
@@ -87,30 +95,46 @@ deploy/nginx/
 
 ### 网络模式
 
-#### Host网络模式（推荐）
+#### Host网络模式（仅Linux推荐）
 - 容器直接使用宿主机网络栈
 - 可以直接访问 `localhost:33333`
 - 性能更好，配置更简单
 - 适合内网服务代理
+- **注意：在macOS/Windows上不工作**（Docker运行在虚拟机中）
 
-#### Bridge网络模式
+#### Bridge网络模式（macOS/Windows推荐）
 - 容器使用独立的网络命名空间
 - 需要端口映射
 - 网络隔离，更安全
 - 适合多容器环境
+- **macOS/Windows上必须使用此模式**
 
 ### 代理功能
 - 支持HTTP和HTTPS代理
-- 自动SSL证书配置
+- 可选的SSL证书配置
+- 支持无SSL模式（使用`--no-ssl`选项）
 - 健康检查和状态监控
 - 静态文件缓存
 - 错误处理和重定向
 
 ### 安全特性
-- SSL/TLS加密
+- SSL/TLS加密（可选）
 - 安全头部配置
 - 代理头部传递
 - 错误页面处理
+
+### SSL 模式说明
+
+#### 启用SSL（默认）
+- 需要提供SSL证书文件（`.pem`和`.key`）
+- 同时支持HTTP（80端口）和HTTPS（443端口）
+- 自动配置安全头部
+
+#### 禁用SSL（`--no-ssl`）
+- 不需要SSL证书文件
+- 仅支持HTTP（80端口）
+- 适合开发环境或内网使用
+- 使用`config/nginx_no_ssl.conf`配置文件
 
 ## 访问测试
 
@@ -187,7 +211,29 @@ docker ps
    ```
    错误: SSL证书文件不存在
    ```
-   解决方案：检查证书文件路径
+   解决方案：
+   - 方案1：检查证书文件路径是否正确
+   - 方案2：使用 `--no-ssl` 选项禁用SSL，仅使用HTTP
+   ```bash
+   ./start-proxy.sh --no-ssl -d
+   ```
+
+5. **macOS上无法访问80端口**
+   ```
+   容器启动成功，但curl localhost:80失败
+   ```
+   解决方案：macOS上的Docker运行在虚拟机中，host网络模式不工作
+   ```bash
+   # 停止当前容器
+   docker stop nginx-proxy
+   docker rm nginx-proxy
+   
+   # 使用bridge网络模式重启
+   ./start-proxy.sh --no-ssl --bridge-network -d
+   
+   # 或者简写
+   ./start-proxy.sh --no-ssl -d  # bridge是默认
+   ```
 
 ### 调试模式
 
@@ -203,7 +249,8 @@ bash -x ./start-proxy.sh --host-network
 3. 如果使用端口 80，可能需要 sudo 权限
 4. 配置文件修改后需要重启容器
 5. 日志文件会持续增长，注意定期清理
-6. 推荐使用host网络模式以获得最佳性能
+6. **macOS/Windows用户必须使用 `--bridge-network` 模式**
+7. Linux用户推荐使用host网络模式以获得最佳性能
 
 ## 许可证
 

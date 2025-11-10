@@ -22,6 +22,7 @@ KEY_PATH="${CONFIG_DIR}/data.yeanhua.asia.key"
 HTML_DIR="./html"
 LOGS_DIR="./logs"
 HOST_NETWORK=true
+ENABLE_SSL=true
 
 # 显示帮助信息
 show_help() {
@@ -36,11 +37,13 @@ show_help() {
     echo "  -f, --force            强制重新创建容器"
     echo "  --host-network         使用host网络模式 (默认启用)"
     echo "  --bridge-network       使用bridge网络模式"
+    echo "  --no-ssl               禁用SSL，仅使用HTTP (不需要证书文件)"
     echo "  --help                 显示此帮助信息"
     echo ""
     echo "示例:"
     echo "  $0 -d                    # 使用host网络模式启动"
     echo "  $0 --bridge-network -d  # 使用bridge网络模式启动"
+    echo "  $0 --no-ssl -d          # 禁用SSL，仅HTTP模式"
     echo "  $0 -n my-proxy -p 8080 -d"
 }
 
@@ -75,6 +78,10 @@ parse_args() {
                 HOST_NETWORK=false
                 shift
                 ;;
+            --no-ssl)
+                ENABLE_SSL=false
+                shift
+                ;;
             --help)
                 show_help
                 exit 0
@@ -94,6 +101,22 @@ check_docker() {
         echo -e "${RED}错误: Docker未运行或无法访问${NC}"
         exit 1
     fi
+    
+    # 检查操作系统，macOS上host网络模式不工作
+    if [ "$HOST_NETWORK" = true ]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo -e "${YELLOW}⚠️  警告: 在macOS上，--network host模式不会将端口映射到宿主机${NC}"
+            echo -e "${YELLOW}   Docker Desktop在虚拟机中运行，host网络模式仅影响虚拟机${NC}"
+            echo -e "${YELLOW}   建议使用 --bridge-network 模式替代${NC}"
+            echo ""
+            read -p "是否继续使用host网络模式? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo -e "${BLUE}切换到bridge网络模式...${NC}"
+                HOST_NETWORK=false
+            fi
+        fi
+    fi
 }
 
 # 检查配置文件
@@ -112,22 +135,31 @@ check_config_files() {
         exit 1
     fi
     
-    # 检查SSL证书文件
-    if [ ! -f "${CERT_PATH}" ]; then
-        echo -e "${RED}❌ SSL证书文件不存在: ${CERT_PATH}${NC}"
-        exit 1
+    # 检查SSL证书文件（如果启用SSL）
+    if [ "$ENABLE_SSL" = true ]; then
+        if [ ! -f "${CERT_PATH}" ]; then
+            echo -e "${RED}❌ SSL证书文件不存在: ${CERT_PATH}${NC}"
+            echo -e "${YELLOW}💡 提示: 使用 --no-ssl 选项可以禁用SSL，仅使用HTTP${NC}"
+            exit 1
+        fi
+        
+        if [ ! -f "${KEY_PATH}" ]; then
+            echo -e "${RED}❌ SSL私钥文件不存在: ${KEY_PATH}${NC}"
+            echo -e "${YELLOW}💡 提示: 使用 --no-ssl 选项可以禁用SSL，仅使用HTTP${NC}"
+            exit 1
+        fi
+        
+        echo -e "${GREEN}✅ 配置文件检查通过${NC}"
+        echo "  nginx.conf: $CONFIG_DIR/nginx.conf"
+        echo "  proxy.conf: $CONFIG_DIR/proxy.conf"
+        echo "  SSL证书: ${CERT_PATH}"
+        echo "  SSL私钥: ${KEY_PATH}"
+    else
+        echo -e "${GREEN}✅ 配置文件检查通过${NC}"
+        echo "  nginx.conf: $CONFIG_DIR/nginx.conf"
+        echo "  proxy.conf: $CONFIG_DIR/proxy.conf"
+        echo -e "${YELLOW}  SSL: 已禁用 (仅HTTP模式)${NC}"
     fi
-    
-    if [ ! -f "${KEY_PATH}" ]; then
-        echo -e "${RED}❌ SSL私钥文件不存在: ${KEY_PATH}${NC}"
-        exit 1
-    fi
-    
-    echo -e "${GREEN}✅ 配置文件检查通过${NC}"
-    echo "  nginx.conf: $CONFIG_DIR/nginx.conf"
-    echo "  proxy.conf: $CONFIG_DIR/proxy.conf"
-    echo "  SSL证书: ${CERT_PATH}"
-    echo "  SSL私钥: ${KEY_PATH}"
 }
 
 # 检查端口
@@ -146,6 +178,16 @@ check_port() {
 create_directories() {
     mkdir -p "$HTML_DIR"
     mkdir -p "$LOGS_DIR"
+}
+
+# 检查无SSL配置文件
+check_no_ssl_config() {
+    if [ ! -f "$CONFIG_DIR/nginx_no_ssl.conf" ]; then
+        echo -e "${RED}❌ 无SSL配置模板文件不存在: $CONFIG_DIR/nginx_no_ssl.conf${NC}"
+        echo "请确保配置文件存在"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ 无SSL配置文件检查通过: $CONFIG_DIR/nginx_no_ssl.conf${NC}"
 }
 
 # 停止现有容器
@@ -182,11 +224,20 @@ start_container() {
         DOCKER_CMD="$DOCKER_CMD --network host"
     else
         DOCKER_CMD="$DOCKER_CMD -p $HOST_PORT:$CONTAINER_PORT"
-        DOCKER_CMD="$DOCKER_CMD -p 443:443"
+        if [ "$ENABLE_SSL" = true ]; then
+            DOCKER_CMD="$DOCKER_CMD -p 443:443"
+        fi
     fi
-    DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/nginx.conf:/etc/nginx/nginx.conf:ro"
+    
+    # 根据是否启用SSL选择不同的nginx配置文件
+    if [ "$ENABLE_SSL" = true ]; then
+        DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/nginx.conf:/etc/nginx/nginx.conf:ro"
+        DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR:/etc/nginx/ssl:ro"
+    else
+        DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/nginx_no_ssl.conf:/etc/nginx/nginx.conf:ro"
+    fi
+    
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR/proxy.conf:/etc/nginx/proxy.conf:ro"
-    DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$CONFIG_DIR:/etc/nginx/ssl:ro"
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$HTML_DIR:/usr/share/nginx/html:ro"
     DOCKER_CMD="$DOCKER_CMD -v $(pwd)/$LOGS_DIR:/var/log/nginx"
     DOCKER_CMD="$DOCKER_CMD --restart unless-stopped"
@@ -203,12 +254,22 @@ start_container() {
         if [ "$HOST_NETWORK" = true ]; then
             echo "  网络模式: host"
             echo "  访问地址: http://localhost"
-            echo "  HTTPS地址: https://localhost"
+            if [ "$ENABLE_SSL" = true ]; then
+                echo "  HTTPS地址: https://localhost"
+            else
+                echo "  SSL: 已禁用"
+            fi
         else
             echo "  HTTP端口: $HOST_PORT"
-            echo "  HTTPS端口: 443"
+            if [ "$ENABLE_SSL" = true ]; then
+                echo "  HTTPS端口: 443"
+            fi
             echo "  访问地址: http://localhost:$HOST_PORT"
-            echo "  HTTPS地址: https://localhost"
+            if [ "$ENABLE_SSL" = true ]; then
+                echo "  HTTPS地址: https://localhost"
+            else
+                echo "  SSL: 已禁用"
+            fi
         fi
         echo ""
         
@@ -222,9 +283,11 @@ start_container() {
         
         echo -e "${YELLOW}💡 测试代理:${NC}"
         echo "  curl http://localhost:$HOST_PORT/health"
-        echo "  curl https://localhost/health"
         echo "  curl http://localhost:$HOST_PORT/proxy-status"
-        echo "  curl https://localhost/proxy-status"
+        if [ "$ENABLE_SSL" = true ]; then
+            echo "  curl https://localhost/health"
+            echo "  curl https://localhost/proxy-status"
+        fi
     else
         echo -e "${RED}❌ 容器启动失败${NC}"
         exit 1
@@ -250,6 +313,11 @@ main() {
     
     # 创建目录
     create_directories
+    
+    # 如果禁用SSL，检查无SSL配置文件
+    if [ "$ENABLE_SSL" = false ]; then
+        check_no_ssl_config
+    fi
     
     # 如果需要强制重新创建或容器已存在，则停止现有容器
     if [ "$FORCE_RECREATE" = true ] || docker ps -a --format "table {{.Names}}" | grep -q "^$CONTAINER_NAME$"; then
