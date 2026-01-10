@@ -71,21 +71,31 @@ X-Custom-Header: custom-value
 - 转发请求到目标服务（通过 `X-Target-*` 头部获取目标信息）
 - 返回目标服务的响应
 
-### 方案3: 使用 nginx-lua 模块（最灵活）
+### 方案3: 使用 nginx-lua 模块（最灵活，当前使用）
 
 **工作原理：**
-- 使用 Lua 脚本先请求鉴权服务
-- 读取鉴权服务返回的响应头
-- 将响应头中的值设置为新的请求头
-- 转发到目标服务
+- 使用 Lua 脚本先请求鉴权服务（支持 POST 请求）
+- 读取鉴权服务返回的 JSON 响应体
+- 解析 JSON，提取字段
+- 将字段值设置为新的请求头变量
+- 转发到目标服务，并添加这些请求头
 
 **优点：**
-- 完全支持请求头修改
-- 灵活，可以实现复杂逻辑
+- ✅ 完全支持请求头修改
+- ✅ 支持 POST 请求到鉴权服务
+- ✅ 支持 JSON 响应解析
+- ✅ 灵活，可以实现复杂逻辑
+- ✅ 避免单点故障（鉴权服务不负责转发）
 
 **缺点：**
-- 需要安装 nginx-lua 模块
+- 需要安装 nginx-lua 模块（使用 OpenResty）
 - 配置相对复杂
+
+**当前实现：**
+- 使用 `start_with_post_auth.sh` 启动
+- 配置文件：`nginx_auth_request_post.conf`
+- 使用 OpenResty 镜像（包含 Lua 模块）
+- 鉴权服务接口：`POST /auth/api_key`，返回 JSON 响应
 
 ## 配置使用
 
@@ -109,9 +119,32 @@ docker run -d --name nginx-proxy \
 2. 使用 `/chain-proxy` 路径访问
 3. 鉴权服务需要读取 `X-Target-*` 头部获取目标信息
 
-### 使用方案3（lua模块）
+### 使用方案3（lua模块，当前使用）
 
-需要修改 Docker 镜像，使用支持 lua 的 nginx 镜像（如 `openresty/openresty`）
+**当前实现使用此方案**
+
+1. 使用启动脚本：
+```bash
+./scripts/start_with_post_auth.sh
+```
+
+2. 或手动启动：
+```bash
+docker run -d --name nginx-proxy \
+  -p 80:80 \
+  -v $(pwd)/config/nginx_auth_request_post.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro \
+  -v $(pwd)/config/proxy_with_auth.conf:/etc/nginx/proxy_with_auth.conf:ro \
+  -v $(pwd)/html:/usr/share/nginx/html:ro \
+  -v $(pwd)/logs:/var/log/nginx \
+  --restart unless-stopped \
+  openresty/openresty:alpine
+```
+
+**技术细节：**
+- 使用 OpenResty（包含 Lua 模块）
+- 使用 `ngx.location.capture` 发送内部子请求
+- 使用 `cjson` 模块解析 JSON 响应
+- 支持 POST 请求到鉴权服务
 
 ## 鉴权服务接口规范
 
@@ -156,6 +189,8 @@ X-Target-Path: /api/users
 
 ## 测试
 
+### 当前实现（方案3）
+
 ```bash
 # 测试健康检查（跳过鉴权）
 curl http://localhost/health
@@ -163,10 +198,20 @@ curl http://localhost/health
 # 测试代理状态（跳过鉴权）
 curl http://localhost/proxy-status
 
-# 测试鉴权代理（方案1）
+# 测试鉴权代理（会调用 POST /auth/api_key）
+curl -H "Authorization: Bearer test-key" http://localhost/api/test
+
+# 查看请求头信息（调试端点）
+curl -H "Authorization: Bearer test-key" http://localhost/debug/headers | python3 -m json.tool
+```
+
+### 其他方案测试
+
+```bash
+# 测试鉴权代理（方案1，如果使用）
 curl http://localhost/api/users
 
-# 测试链式代理（方案2）
+# 测试链式代理（方案2，如果使用）
 curl http://localhost/chain-proxy/api/users
 ```
 
@@ -179,6 +224,32 @@ curl http://localhost/chain-proxy/api/users
 
 ## 推荐方案
 
+- **✅ 当前使用**：方案3（lua模块）- 支持 POST 鉴权，灵活且避免单点故障
 - **如果鉴权服务可以修改并支持转发**：使用方案2（链式代理）
-- **如果只需要鉴权检查，不需要修改请求头**：使用方案1（auth_request）
-- **如果需要复杂的请求头修改逻辑**：使用方案3（lua模块）
+- **如果只需要鉴权检查，不需要修改请求头，且鉴权服务支持 GET**：使用方案1（auth_request）
+
+## 当前实现说明
+
+**当前使用的是方案3（lua模块）**，具体特点：
+
+1. **鉴权服务接口**：`POST /auth/api_key`
+2. **请求格式**：JSON 请求体
+   ```json
+   {
+     "auth_header": "Bearer test-key",
+     "uri": "/api/test",
+     "method": "GET"
+   }
+   ```
+3. **响应格式**：JSON 响应体
+   ```json
+   {
+     "organization_id": "org-123",
+     "account_id": "account-456",
+     ...
+   }
+   ```
+4. **实现方式**：Lua 脚本解析 JSON，设置变量，添加到请求头
+5. **启动方式**：使用 `start_with_post_auth.sh` 脚本
+
+详细说明见：`AUTH_REQUEST_README.md` 和 `POST_AUTH_SOLUTION.md`
