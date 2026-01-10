@@ -2,6 +2,38 @@
 
 这个目录包含了用于管理 Nginx 代理容器的脚本工具。
 
+## 快速参考
+
+### macOS/Windows 用户（推荐命令）
+
+```bash
+# 启动（无SSL，HTTP模式）
+./start-proxy.sh --no-ssl -d
+
+# 访问测试
+curl http://localhost/health
+curl http://localhost/proxy-status
+
+# 查看日志
+docker logs -f nginx-proxy
+
+# 停止容器
+docker stop nginx-proxy
+```
+
+### Linux 用户（推荐命令）
+
+```bash
+# 启动（host网络模式）
+./start-proxy.sh --host-network -d
+
+# 访问测试
+curl http://localhost/health
+
+# 查看日志
+docker logs -f nginx-proxy
+```
+
 ## 文件说明
 
 - `start-proxy.sh` - Nginx 代理容器启动脚本
@@ -12,15 +44,22 @@
 
 ### 启动 Nginx 代理容器
 
+**重要提示：**
+- **macOS/Windows 用户**：必须使用 `--bridge-network` 模式（或默认模式），因为 Docker Desktop 在虚拟机中运行，host 网络模式无法映射端口到宿主机
+- **Linux 用户**：可以使用 `--host-network` 模式获得更好性能
+
 ```bash
-# 使用host网络模式启动（推荐）
+# macOS/Windows推荐：使用bridge网络模式（默认）
+./start-proxy.sh --no-ssl --bridge-network -d
+
+# 或者简写（bridge是默认模式）
+./start-proxy.sh --no-ssl -d
+
+# Linux推荐：使用host网络模式
 ./start-proxy.sh --host-network -d
 
-# 使用bridge网络模式启动
-./start-proxy.sh -d
-
 # 指定端口和容器名称
-./start-proxy.sh -n my-proxy -p 8080 -d
+./start-proxy.sh -n my-proxy -p 8080 --no-ssl -d
 ```
 
 ## 详细使用说明
@@ -48,26 +87,26 @@
 #### 使用示例
 
 ```bash
-# 1. Host网络模式启动（推荐）
+# 1. macOS/Windows推荐：禁用SSL + bridge网络模式
+./start-proxy.sh --no-ssl --bridge-network -d
+
+# 2. Linux推荐：host网络模式启动
 ./start-proxy.sh --host-network -d
 
-# 2. Bridge网络模式启动
-./start-proxy.sh -d
-
-# 3. 禁用SSL，仅使用HTTP（无需证书）
+# 3. 禁用SSL，仅使用HTTP（无需证书，macOS/Windows推荐）
 ./start-proxy.sh --no-ssl -d
 
 # 4. 自定义端口和名称
-./start-proxy.sh -n web-proxy -p 8080 -d
+./start-proxy.sh -n web-proxy -p 8080 --no-ssl -d
 
 # 5. 强制重新创建容器
-./start-proxy.sh -f -d
+./start-proxy.sh -f --no-ssl -d
 
 # 6. 前台运行（调试模式）
-./start-proxy.sh --host-network
+./start-proxy.sh --no-ssl --bridge-network
 
-# 7. 组合使用：禁用SSL + host网络模式
-./start-proxy.sh --no-ssl --host-network -d
+# 7. 启用SSL模式（需要证书文件）
+./start-proxy.sh --bridge-network -d
 ```
 
 ## 目录结构
@@ -100,14 +139,15 @@ deploy/nginx/
 - 可以直接访问 `localhost:33333`
 - 性能更好，配置更简单
 - 适合内网服务代理
-- **注意：在macOS/Windows上不工作**（Docker运行在虚拟机中）
+- **⚠️ 在macOS/Windows上不工作**：Docker Desktop 在虚拟机中运行，host 网络模式仅影响虚拟机内部，无法将端口映射到宿主机
 
-#### Bridge网络模式（macOS/Windows推荐）
+#### Bridge网络模式（macOS/Windows推荐，默认模式）
 - 容器使用独立的网络命名空间
-- 需要端口映射
+- 通过端口映射访问（如 `-p 80:80`）
 - 网络隔离，更安全
 - 适合多容器环境
-- **macOS/Windows上必须使用此模式**
+- **✅ macOS/Windows上必须使用此模式才能从宿主机访问**
+- 默认端口映射：`80:80`（HTTP），`443:443`（HTTPS，如果启用SSL）
 
 ### 代理功能
 - 支持HTTP和HTTPS代理
@@ -140,18 +180,41 @@ deploy/nginx/
 
 启动容器后，可以通过以下方式访问：
 
+### Bridge网络模式（macOS/Windows默认）
+
 ```bash
 # 健康检查
 curl http://localhost/health
-curl https://localhost/health
+# 或指定端口
+curl http://localhost:80/health
 
 # 代理状态
 curl http://localhost/proxy-status
-curl https://localhost/proxy-status
 
-# 主应用（Apache Superset）
-curl -L https://www.yeanhua.asia/
+# 访问根路径（会代理到后端服务）
+curl http://localhost/
+
+# 如果启用了SSL
+curl https://localhost/health
+curl https://localhost/proxy-status
 ```
+
+### Host网络模式（仅Linux）
+
+```bash
+# 直接访问localhost（无需端口号）
+curl http://localhost/health
+curl http://localhost/proxy-status
+
+# 如果启用了SSL
+curl https://localhost/health
+```
+
+### 浏览器访问
+
+- **Bridge模式**：`http://localhost` 或 `http://localhost:80`
+- **Host模式（Linux）**：`http://localhost`
+- **HTTPS（如果启用）**：`https://localhost`
 
 ## 日志查看
 
@@ -169,6 +232,12 @@ tail -f logs/error.log
 ## 容器管理
 
 ```bash
+# 查看容器状态和端口映射
+docker ps --filter "name=nginx-proxy"
+
+# 查看容器详细信息
+docker inspect nginx-proxy
+
 # 停止容器
 docker stop nginx-proxy
 
@@ -178,8 +247,14 @@ docker restart nginx-proxy
 # 删除容器
 docker rm nginx-proxy
 
-# 查看容器状态
-docker ps
+# 删除容器（如果正在运行，先停止）
+docker rm -f nginx-proxy
+
+# 查看容器日志
+docker logs nginx-proxy
+
+# 实时查看容器日志
+docker logs -f nginx-proxy
 ```
 
 ## 故障排除
@@ -218,21 +293,36 @@ docker ps
    ./start-proxy.sh --no-ssl -d
    ```
 
-5. **macOS上无法访问80端口**
+5. **macOS/Windows上无法访问服务**
    ```
-   容器启动成功，但curl localhost:80失败
+   容器启动成功，但curl localhost失败
+   警告: 在macOS上，--network host模式不会将端口映射到宿主机
    ```
-   解决方案：macOS上的Docker运行在虚拟机中，host网络模式不工作
+   **原因**：macOS/Windows上的Docker Desktop运行在虚拟机中，host网络模式仅影响虚拟机内部，无法将端口映射到宿主机。
+   
+   **解决方案**：使用bridge网络模式
    ```bash
    # 停止当前容器
    docker stop nginx-proxy
    docker rm nginx-proxy
    
-   # 使用bridge网络模式重启
+   # 使用bridge网络模式重启（推荐）
    ./start-proxy.sh --no-ssl --bridge-network -d
    
-   # 或者简写
-   ./start-proxy.sh --no-ssl -d  # bridge是默认
+   # 或者简写（bridge是默认模式）
+   ./start-proxy.sh --no-ssl -d
+   
+   # 验证访问
+   curl http://localhost/health
+   curl http://localhost/proxy-status
+   ```
+   
+   **验证容器端口映射**：
+   ```bash
+   # 查看容器端口映射
+   docker ps --filter "name=nginx-proxy" --format "table {{.Names}}\t{{.Ports}}"
+   
+   # 应该显示类似：0.0.0.0:80->80/tcp
    ```
 
 ### 调试模式
@@ -244,13 +334,24 @@ bash -x ./start-proxy.sh --host-network
 
 ## 注意事项
 
-1. 确保 Docker 已安装并运行
-2. 确保有足够的磁盘空间
-3. 如果使用端口 80，可能需要 sudo 权限
-4. 配置文件修改后需要重启容器
-5. 日志文件会持续增长，注意定期清理
-6. **macOS/Windows用户必须使用 `--bridge-network` 模式**
-7. Linux用户推荐使用host网络模式以获得最佳性能
+1. **网络模式选择**：
+   - **macOS/Windows用户**：必须使用 `--bridge-network` 模式（默认），否则无法从宿主机访问
+   - **Linux用户**：推荐使用 `--host-network` 模式以获得最佳性能
+
+2. **端口访问**：
+   - Bridge模式：通过 `http://localhost:80` 访问（或简写 `http://localhost`）
+   - Host模式（Linux）：直接通过 `http://localhost` 访问
+
+3. **SSL证书**：
+   - 启用SSL需要提供证书文件（`.pem` 和 `.key`）
+   - 开发环境建议使用 `--no-ssl` 选项，仅使用HTTP
+
+4. **其他注意事项**：
+   - 确保 Docker 已安装并运行
+   - 确保有足够的磁盘空间
+   - 配置文件修改后需要重启容器：`docker restart nginx-proxy`
+   - 日志文件会持续增长，注意定期清理
+   - 后端服务地址在 `config/proxy.conf` 中配置（默认：`host.docker.internal:8000`）
 
 ## 许可证
 
